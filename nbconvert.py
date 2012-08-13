@@ -730,6 +730,58 @@ def text_cell(f):
         return lines
     return wrapped
 
+
+class ConverterGithubMarkdown(ConverterMarkdown):
+
+    def __init__(self, infile, highlight_source=False, show_prompts=True,
+                 inline_prompt=False):
+        super(ConverterGithubMarkdown, self).__init__(infile)
+        self.highlight_source = highlight_source
+        self.show_prompts = show_prompts
+        self.inline_prompt = inline_prompt
+
+    @DocInherit
+    def render_code(self, cell):
+        if not cell.input:
+            return []
+        lines = ["```%s" % cell.get("language") or "python"]
+        if self.show_prompts and not self.inline_prompt:
+            lines.extend(['*In[%s]:*' % cell.prompt_number, ''])
+        if self.show_prompts and self.inline_prompt:
+            prompt = 'In[%s]: ' % cell.prompt_number
+            input_lines = cell.input.split('\n')
+            src = prompt + input_lines[0] + '\n' + indent('\n'.join(input_lines[1:]), nspaces=len(prompt))
+        else:
+            src = cell.input
+        src = highlight(src) if self.highlight_source else src
+        lines.extend([src, '```', ''])
+        for output in cell.outputs:
+            conv_fn = self.dispatch(output.output_type)
+            lines.extend(conv_fn(output))
+
+        #lines.append('----')
+        lines.append('')
+        return lines
+
+    @DocInherit
+    def render_pyout(self, output, prompt_number=None):
+        lines = []
+
+        # output is a dictionary like object with type as a key
+        if 'latex' in output:
+            pass
+
+        if 'text' in output:
+            lines.extend(['<pre>',
+                          '*Out[%s]:*' % output.prompt_number, '',
+                          indent(output.text),
+                          '</pre>'])
+        lines.append('')
+        return lines
+
+
+
+
 class ConverterHTML(Converter):
     extension = 'html'
 
@@ -1415,6 +1467,9 @@ def main(infile, format='rst'):
     elif format == 'latex':
         converter = ConverterLaTeX(infile)
         latexfname = converter.render()
+    elif format == "github":
+        converter = ConverterGithubMarkdown(infile)
+        converter.render()
     else:
         raise SystemExit("Unknown format '%s', " % format +
                 "known formats are: " + known_formats)
